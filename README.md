@@ -25,3 +25,9 @@ The following steps are takeng during renewal:
    host/principal. For every principal we create a TXT DNS record in IPA which
    is then validated by LetsEncrypt servers
 3. Certificate is installed for both web and ldap servers
+
+
+To install, register and apply for a cert run the following command on the IPA
+server as a root user with a valid admin kerberos ticket:
+
+wget https://raw.githubusercontent.com/antevens/letsencrypt-freeipa/master/install.sh -O - | bash

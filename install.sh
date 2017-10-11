@@ -50,10 +50,11 @@ fi
 
 if [[ ${REPLY} =~ ^[Yy]$ ]]; then
     destination='/usr/sbin/renew_letsencrypt_cert.sh'
+    cronfile="/etc/cron.d/$(basename ${destination})"
     export interactive
     old_umask="$(umask)"
     umask 0002
-    wget https://raw.githubusercontent.com/antevens/letsencrypt-freeipa/master/register.sh | bash
+    wget https://raw.githubusercontent.com/antevens/letsencrypt-freeipa/master/register.sh -O - | bash
     wget https://raw.githubusercontent.com/antevens/letsencrypt-freeipa/master/renew.sh -O "${destination}"
     chown root:root "${destination}"
     chmod 0700 "${destination}"
@@ -62,20 +63,19 @@ if [[ ${REPLY} =~ ^[Yy]$ ]]; then
 
     echo  "Your system has been configured for using LetsEncrypt, adding a cronjob for renewals"
 
-    minute=${RANDOM}
-    hour=${RANDOM}
-    day=${RANDOM}
+    minute="${RANDOM}"
+    hour="${RANDOM}"
+    day="${RANDOM}"
+
     let "minute %= 60"
     let "hour %= 6"
     let "day %= 28"
-
     cronjob="${minute} ${hour} ${day} */2 ${destination}"
 
-    ( crontab -l | grep --invert-match --fixed-strings "${destination}" ; echo "${cronjob}" ) | crontab -
-    echo "Added Cronjob: ${cronjob}"
+    echo "Adding Cronjob: ${cronjob} to ${cronfile}"
+    echo "${cronjob}" > "${cronfile}"
 
 else
     echo "Let's Encrypt FreeIPA installation cancelled by user"
     exit 1
 fi
-

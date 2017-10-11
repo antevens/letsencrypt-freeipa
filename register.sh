@@ -57,48 +57,45 @@ if ${interactive} ; then
 	echo
 
 	# Get a fresh kerberos ticket if needed
-        klist || ( [ "${EUID}" -eq 0 ] && kinit "${SUDO_USER:-${USER}}" ) || kinit
+        klist || ( [ "${EUID:-$(id -u)}" -eq 0 ] && kinit "${SUDO_USER:-${USER}}" ) || kinit
     done
 else
     REPLY="y"
 fi
 
-host="$(hostname)"
-realm="$(grep default_realm /etc/krb5.conf | awk -F= '{print $NF}' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-group='admins'
-principals="$(ipa host-show ${host} --raw | grep krbprincipalname | grep 'host/' | sed 's.krbprincipalname: host/..' | sed s/@${realm}//)"
+if [[ ${REPLY} =~ ^[Yy]$ ]]; then
+    host="$(hostname)"
+    realm="$(grep default_realm /etc/krb5.conf | awk -F= '{print $NF}' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    group='admins'
+    principals="$(ipa host-show ${host} --raw | grep krbprincipalname | grep 'host/' | sed 's.krbprincipalname: host/..' | sed s/@${realm}//)"
 
-wget https://letsencrypt.org/certs/isrgrootx1.pem | sudo ipa-cacert-manage install isrgrootx1.pem -n ISRGRootCAX1 -t C,,
-wget https://letsencrypt.org/certs/letsencryptauthorityx3.pem | sudo ipa-cacert-manage install letsencryptauthorityx3.pem -n ISRGRootCAX3 -t C,,
-if [ "${EUID}" -ne 0 ] && ${interactive} ; then
-    sudo bash -c "export KRB5CCNAME='${KRB5CCNAME:-}' && ipa-certupdate -v"
+    wget https://letsencrypt.org/certs/isrgrootx1.pem | sudo ipa-cacert-manage install isrgrootx1.pem -n ISRGRootCAX1 -t C,,
+    wget https://letsencrypt.org/certs/letsencryptauthorityx3.pem | sudo ipa-cacert-manage install letsencryptauthorityx3.pem -n ISRGRootCAX3 -t C,,
+    if [ "${EUID}" -ne 0 ] && ${interactive} ; then
+        sudo bash -c "export KRB5CCNAME='${KRB5CCNAME:-}' && ipa-certupdate -v"
+    else
+        ipa-certupdate
+    fi
+
+    sudo yum -y install certbot || sudo apt-get -y install certbot
+    ipa service-add "lets-encrypt/${host}@${realm}"
+    ipa role-add "DNS Administrator"
+    ipa role-add-privilege "DNS Administrator" --privileges="DNS Administrators"
+    ipa role-add-member "DNS Administrator" --services="lets-encrypt/${host}@${realm}"
+    ipa service-allow-create-keytab "lets-encrypt/${host}@${realm}" --groups=${group}
+    ipa service-allow-retrieve-keytab "lets-encrypt/${host}@${realm}" --groups=${group}
+    ipa-getkeytab -p "lets-encrypt/${host}" -k /etc/lets-encrypt.keytab #add -r to renew
+
+    for principal in ${principals} ; do
+        zone="$(echo "${principal}" | sed -e 's/^[a-zA-Z0-9\-\_]*\.//')"
+        ipa dnsrecord-add "${zone}." "_acme-challenge.${principal}." --txt-rec='INITIALIZED'
+    done
+
+    # Apply for the initial certificate if script is available
+    if [ -f "$(dirname ${0})/renew.sh" ] ; then
+        sudo bash -c "$(dirname ${0})/renew.sh"
+    fi
 else
-    ipa-certupdate
+    echo "Let's Encrypt registration cancelled by user"
+    exit 1
 fi
-
-sudo yum -y install certbot || sudo apt-get -y install certbot
-ipa service-add "lets-encrypt/${host}@${realm}"
-ipa role-add "DNS Administrator"
-ipa role-add-privilege "DNS Administrator" --privileges="DNS Administrators"
-ipa role-add-member "DNS Administrator" --services="lets-encrypt/${host}@${realm}"
-ipa service-allow-create-keytab "lets-encrypt/${host}@${realm}" --groups=${group}
-ipa service-allow-retrieve-keytab "lets-encrypt/${host}@${realm}" --groups=${group}
-ipa-getkeytab -p "lets-encrypt/${host}" -k /etc/lets-encrypt.keytab #add -r to renew
-
-for principal in ${principals} ; do
-    zone="$(echo "${principal}" | sed -e 's/^[a-zA-Z0-9\-\_]*\.//')"
-    ipa dnsrecord-add "${zone}." "_acme-challenge.${principal}." --txt-rec='INITIALIZED'
-done
-
-# Apply for the initial certificate
-sudo bash -c "$(dirname ${0})/renew.sh"
-
-echo  "Your system has been configured for using LetsEncrypt, plese consider creating a cronjob for renewals"
-minute=${RANDOM}
-hour=${RANDOM}
-day=${RANDOM}
-let "minute %= 60"
-let "hour %= 6"
-let "day %= 28"
-
-echo "Example Cronjob: ${minute} ${hour} ${day} */2 ${PWD}/renew.sh*"

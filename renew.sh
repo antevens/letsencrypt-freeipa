@@ -24,7 +24,7 @@
 version='0.0.1'
 
 # Exit if not being run as root
-if [ "${EUID}" -ne "0" ] ; then
+if [ "${EUID:-$(id -u)}" -ne "0" ] ; then
     echo "This script needs superuser privileges, suggest running it as root"
     exit 1
 fi

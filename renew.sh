@@ -20,8 +20,11 @@
 #  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 #  DEALINGS IN THE SOFTWARE.
 
+# Set strict mode
+set -euo pipefail
+
 # Version
-version='0.0.1'
+version='0.0.2'
 
 # Exit if not being run as root
 if [ "${EUID:-$(id -u)}" -ne "0" ] ; then
@@ -39,7 +42,28 @@ fi
 # Default is interactive mode unless already set
 interactive="${interactive:-true}"
 
-set -euo pipefail
+
+# Safely loads config file
+# First parameter is filename, all consequent parameters are assumed to be
+# valid configuration parameters
+function load_config()
+{
+    config_file="${1}"
+    # Verify config file permissions are correct and warn if they are not
+    # Dual stat commands to work with both linux and bsd
+    shift
+    while read line; do
+        if [[ "${line}" =~ ^[^#]*= ]]; then
+            setting_name="$(echo ${line} | awk --field-separator='=' '{print $1}' | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+            setting_value="$(echo ${line} | cut --fields=1 --delimiter='=' --complement | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+
+            if echo "${@}" | grep -q "${setting_name}" ; then
+                export ${setting_name}="${setting_value}"
+                echo "Loaded config parameter ${setting_name} with value of '${setting_value}'"
+            fi
+        fi
+    done < "${config_file}";
+}
 
 # This script will automatically fetch/renew your LetsEncrypt certificate for all
 # defined principals. Before running this script you should run the acompanying
@@ -49,9 +73,8 @@ set -euo pipefail
 # for the first/shortest principal in IPA, this can be overwritten using the
 # email environment variable, for example:
 # email="admin@example.com" ./renew.sh
-
+load_config '/etc/ipa/default.conf' realm
 host="$(hostname)"
-realm="$(grep default_realm /etc/krb5.conf | awk -F= '{print $NF}' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 domain_args="$(ipa host-show ${host} --raw | grep krbprincipalname | grep 'host/' | sed 's.krbprincipalname: host/.-d .' | sed s/@${realm}//g | sort -r)"
 dns_domain_name="$(echo ${host} | awk -F. '{OFS="."; print $(NF-1), $NF; }')"
 soa_record="$(dig SOA ${dns_domain_name} + short | grep ^${dns_domain_name}. | grep 'SOA' | awk '{print $6}')"

@@ -5,6 +5,9 @@ The register script will modify your FreeIPA setup so that the server you run
 it on can apply for LetsEncrypt SSL/TLS certificates for all hostnames/principals
 associted with it in FreeIPA.
 
+This script was tested with IPA v. 4.4 but should work with 4.2 and newer due
+to depending on the ipa-server-certinstall command.
+
 This script needs the host to be registered in FreeIPA and the IPA client
 installed and that the user running the script is in the IPA admins group.
 

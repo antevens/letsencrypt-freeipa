@@ -34,21 +34,3 @@ To install, register and apply for a cert run the following command on the IPA
 server as a root user with a valid admin kerberos ticket:
 
 wget https://raw.githubusercontent.com/antevens/letsencrypt-freeipa/master/install.sh -O - | bash
-
-Note that when upgrading from Centos/RHEL 7.3 to 7.4 you might encounter the
-following error/bug: https://bugzilla.redhat.com/show_bug.cgi?id=1488520
-
-DEBUG stderr=certutil: Could not find cert: Server-Cert
-: PR_FILE_NOT_FOUND_ERROR: File not found
-
-To work around this issue the certificate needs to be renamed as listed in the
-following RedHat article:
-
-https://access.redhat.com/solutions/3176251
-
-certutil -L -d /etc/dirsrv/slapd-EXAMPLE-COM -n
-"CN=ipaserver.example.com,O=EXAMPLE.COM" -a > /tmp/cert
-certutil -D -d /etc/dirsrv/slapd-EXAMPLE-COM -n
-"CN=ipaserver.example.com,O=EXAMPLE.COM"
-certutil -A -d /etc/dirsrv/slapd-EXAMPLE-COM -n Server-Cert -t u,u,u -a -i
-/tmp/cert

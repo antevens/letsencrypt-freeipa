@@ -50,5 +50,5 @@ certutil -L -d /etc/dirsrv/slapd-EXAMPLE-COM -n
 "CN=ipaserver.example.com,O=EXAMPLE.COM" -a > /tmp/cert
 certutil -D -d /etc/dirsrv/slapd-EXAMPLE-COM -n
 "CN=ipaserver.example.com,O=EXAMPLE.COM"
-certutil -A -d /etc/dirsrv/slapd-EXAMPLE-COM -n Server-Cert -t u,u,u-a -i
+certutil -A -d /etc/dirsrv/slapd-EXAMPLE-COM -n Server-Cert -t u,u,u -a -i
 /tmp/cert

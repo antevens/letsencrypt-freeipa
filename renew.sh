@@ -83,7 +83,7 @@ soa_record="$(dig SOA ${dns_domain_name} + short | grep ^${dns_domain_name}. | g
 hostmaster="${soa_record/\./@}"
 email="${email:-${hostmaster%\.}}"
 letsencrypt_live_dir="/etc/letsencrypt/live"
-letsencrypt_pem_dir="$(find ${letsencrypt_live_dir} -newermt @${start_time_epoch} -type f -name 'privkey.pem' -exec dirname {} \;)"
+letsencrypt_pem_dir="$(find -L ${letsencrypt_live_dir} -newermt @${start_time_epoch} -type f -name 'privkey.pem' -exec dirname {} \;)"
 
 # Apply for a new cert using CertBot with DNS verification
 certbot certonly --manual \

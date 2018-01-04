@@ -75,6 +75,8 @@ function load_config()
 # email="admin@example.com" ./renew.sh
 load_config '/etc/ipa/default.conf' realm
 host="$(hostname)"
+# Get kerberos ticket to modify DNS entries
+kinit -k -t /etc/lets-encrypt.keytab "lets-encrypt/${host}"
 domain_args="$(ipa host-show ${host} --raw | grep krbprincipalname | grep 'host/' | sed 's.krbprincipalname: host/.-d .' | sed s/@${realm}//g | sort -r)"
 dns_domain_name="$(echo ${host} | awk -F. '{OFS="."; print $(NF-1), $NF; }')"
 soa_record="$(dig SOA ${dns_domain_name} + short | grep ^${dns_domain_name}. | grep 'SOA' | awk '{print $6}')"
@@ -82,9 +84,6 @@ hostmaster="${soa_record/\./@}"
 email="${email:-${hostmaster%\.}}"
 letsencrypt_live_dir="/etc/letsencrypt/live"
 letsencrypt_pem_dir="$(find ${letsencrypt_live_dir} -newermt @${start_time_epoch} -type f -name 'privkey.pem' -exec dirname {} \;)"
-
-# Get kerberos ticket to modify DNS entries
-kinit -k -t /etc/lets-encrypt.keytab "lets-encrypt/${host}"
 
 # Apply for a new cert using CertBot with DNS verification
 certbot certonly --manual \

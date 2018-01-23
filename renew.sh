@@ -93,6 +93,7 @@ certbot certonly --manual \
                  ${domain_args} \
                  --agree-tos \
                  --email "${email}" \
+                 --expand \
                  -n
 
 # If the certificate has bee updated since start of this script

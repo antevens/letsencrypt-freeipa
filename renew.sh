@@ -24,7 +24,8 @@
 set -euo pipefail
 
 # Version
-version='0.0.2'
+# shellcheck disable=2034
+version='0.0.3'
 
 # Exit if not being run as root
 if [ "${EUID:-$(id -u)}" -ne "0" ] ; then
@@ -52,13 +53,13 @@ function load_config()
     # Verify config file permissions are correct and warn if they are not
     # Dual stat commands to work with both linux and bsd
     shift
-    while read line; do
+    while read -r line; do
         if [[ "${line}" =~ ^[^#]*= ]]; then
-            setting_name="$(echo ${line} | awk --field-separator='=' '{print $1}' | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
-            setting_value="$(echo ${line} | cut --fields=1 --delimiter='=' --complement | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+            setting_name="$(echo "${line}" | awk --field-separator='=' '{print $1}' | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+            setting_value="$(echo "${line}" | cut --fields=1 --delimiter='=' --complement | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
 
             if echo "${@}" | grep -q "${setting_name}" ; then
-                export ${setting_name}="${setting_value}"
+                export "${setting_name}"="${setting_value}"
                 echo "Loaded config parameter ${setting_name} with value of '${setting_value}'"
             fi
         fi
@@ -77,20 +78,53 @@ load_config '/etc/ipa/default.conf' realm
 host="$(hostname)"
 # Get kerberos ticket to modify DNS entries
 kinit -k -t /etc/lets-encrypt.keytab "lets-encrypt/${host}"
-domain_args="$(ipa host-show ${host} --raw | grep krbprincipalname | grep 'host/' | sed 's.krbprincipalname: host/.-d .' | sed s/@${realm}//g | sort -r)"
-dns_domain_name="$(echo ${host} | awk -F. '{OFS="."; print $(NF-1), $NF; }')"
-soa_record="$(dig SOA ${dns_domain_name} + short | grep ^${dns_domain_name}. | grep 'SOA' | awk '{print $6}')"
+# shellcheck disable=2154
+domain_args="$(ipa host-show "${host}" --raw | grep krbprincipalname | grep 'host/' | sed 's.krbprincipalname: host/.-d .' | sed s/"@${realm}"//g | sort -r)"
+dns_domain_name="${host#[a-zA-Z0-9\-\_]*\.}"
+soa_record="$(dig SOA "${dns_domain_name}" + short | grep ^"${dns_domain_name}". | grep 'SOA' | awk '{print $6}')"
 hostmaster="${soa_record/\./@}"
 email="${email:-${hostmaster%\.}}"
 letsencrypt_live_dir="/etc/letsencrypt/live"
-letsencrypt_pem_dir="$(find -L ${letsencrypt_live_dir} -newermt @${start_time_epoch} -type f -name 'privkey.pem' -exec dirname {} \;)"
+letsencrypt_pem_dir="$(find -L ${letsencrypt_live_dir} -newermt "@${start_time_epoch}" -type f -name 'privkey.pem' -exec dirname {} \;)"
+
+# Configure the manual auth hook
+# shellcheck disable=2016
+default_auth_hook='ipa dnsrecord-mod ${CERTBOT_DOMAIN#*.}. _acme-challenge.${CERTBOT_DOMAIN}. --txt-rec=${CERTBOT_VALIDATION}'
+
+# Configure alternative nsupdate hook
+nsupdate_auth_server="${NSUPDATE_AUTH_SERVER:-$(nslookup -type=soa "${dns_domain_name}"  | grep 'origin =' | sed -e 's/[[:space:]]*origin = //')}"
+#shellcheck disable=2016
+nsupdate_commands=(
+    "server ${nsupdate_auth_server}"
+    'update delete _acme-challenge.${CERTBOT_DOMAIN} TXT'
+    'update add _acme-challenge.${CERTBOT_DOMAIN} 320 IN TXT "${CERTBOT_VALIDATION}'
+    'send'
+)
+nsupdate_key_name="${NSUPDATE_KEY_NAME:-}"
+nsupdate_key_secret="${NSUPDATE_KEY_SECRET:-}"
+nsupdate_key_file="${NSUPDATE_KEY_FILE:-}"
+nsupdate_auth_hook='printf "%s\n" '"${nsupdate_commands[*]} | nsupdate -v"
+# Prefer key file but also accept key_name/secret combo
+if [ -n "${nsupdate_key_file}" ] ; then
+    if [ -e "${nsupdate_key_file}" ] ; then
+        default_auth_hook="${nsupdate_auth_hook} -k ${nsupdate_key_file}"
+    else
+        echo "Specified nsupdate key file ${nsupdate_key_file} does not exist, exiting!"
+        exit 1
+    fi
+elif [ -n "${nsupdate_key_name}" ] && [ -n "${nsupdate_key_secret}" ] ; then
+    default_auth_hook="${nsupdate_auth_hook} -y ${nsupdate_key_name}:${nsupdate_key_secret}"
+fi
+
+# Set the auth hook
+auth_hook="${AUTH_HOOK:-${default_auth_hook}}"
 
 # Apply for a new cert using CertBot with DNS verification
 certbot certonly --manual \
                  --preferred-challenges dns \
                  --manual-public-ip-logging-ok \
-                 --manual-auth-hook 'ipa dnsrecord-mod ${CERTBOT_DOMAIN#*.}. _acme-challenge.${CERTBOT_DOMAIN}. --txt-rec=${CERTBOT_VALIDATION}' \
-                 ${domain_args} \
+                 --manual-auth-hook "${auth_hook}" \
+                 "${domain_args}" \
                  --agree-tos \
                  --email "${email}" \
                  --expand \

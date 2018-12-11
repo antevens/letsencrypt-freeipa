@@ -24,7 +24,8 @@
 set -euo pipefail
 
 # Version
-version='0.0.2'
+# shellcheck disable=2034
+version='0.0.3'
 
 # Exit if not being run as root
 if [ "${EUID:-$(id -u)}" -ne "0" ] ; then
@@ -67,10 +68,10 @@ if [[ ${REPLY} =~ ^[Yy]$ ]]; then
     hour="${RANDOM}"
     day="${RANDOM}"
 
-    let "minute %= 60"
-    let "hour %= 6"
-    let "day %= 28"
-    cronjob="${minute} ${hour} ${day} */2 ${destination}"
+    (( minute %= 60 ))
+    (( hour %= 6 ))
+    (( day %= 28 ))
+    cronjob="${minute} ${hour} ${day} * * root ${destination}"
 
     echo "Adding Cronjob: ${cronjob} to ${cronfile}"
     echo "${cronjob}" > "${cronfile}"

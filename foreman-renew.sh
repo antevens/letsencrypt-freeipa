@@ -9,6 +9,7 @@ kct_dir="/etc/pki/katello-certs-tools"
 k_dir="/etc/pki/katello"
 
 # Get new certificate
+# shellcheck disable=2016
 certbot certonly --manual \
                  --preferred-challenges dns \
                  --manual-public-ip-logging-ok \

@@ -1,6 +1,8 @@
 # letsencrypt-freeipa
 Scripts to automate installation, configuration and renewal of LetsEncrypt certificates on FreeIPA Servers.
 
+Note that these scripts assume that FreeIPA is managing the DNS servers required to authorize the issuing of certificates for the domains in question.
+
 The register script will modify your FreeIPA setup so that the server you run
 it on can apply for LetsEncrypt SSL/TLS certificates for all hostnames/principals
 associted with it in FreeIPA.

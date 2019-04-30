@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Set strict mode
+set -euo pipefail
+#set -x
+
 # Copyright (c) 2017 Antonia Stevens a@antevens.com
 
 #  Permission is hereby granted, free of charge, to any person obtaining a
@@ -20,18 +24,22 @@
 #  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 #  DEALINGS IN THE SOFTWARE.
 
-# Set strict mode
-set -euo pipefail
-#set -x
-
 # Version
 version='0.0.2'
 
 letsencrypt_live_dir="/etc/letsencrypt/live"
 
+# Print to stderr
+errcho(){ >&2 echo $@; }
+
 # Exit if not being run as root
 if [ "${EUID:-$(id -u)}" -ne "0" ] ; then
-    echo "This script needs superuser privileges, suggest running it as root"
+    errcho "This script needs superuser privileges, suggest running it as root"
+    exit 1
+fi
+
+if ! which ipa-server-certinstall >/dev/null ; then
+    errcho "ipa-server-certinstall not found; you probably need to update your PATH."
     exit 1
 fi
 
@@ -45,10 +53,6 @@ fi
 # Default is interactive mode unless already set
 interactive="${interactive:-true}"
 
-
-# Print to stderr
-errcho(){ >&2 echo $@; }
-
 # Safely loads config file
 # First parameter is filename, all consequent parameters are assumed to be
 # valid configuration parameters
@@ -59,15 +63,17 @@ function load_config()
     # Dual stat commands to work with both linux and bsd
     shift
     while read line; do
-        if [[ "${line}" =~ ^[^#]*= ]]; then
-            setting_name="$(echo ${line} | awk --field-separator='=' '{print $1}' | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
-            setting_value="$(echo ${line} | cut --fields=1 --delimiter='=' --complement | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+    if [[ "${line}" =~ ^[^#]*= ]]; then
+        setting_name="$(echo ${line} | awk --field-separator='=' '{print $1}' | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+        setting_value="$(echo ${line} | cut --fields=1 --delimiter='=' --complement | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
 
-            if echo "${@}" | grep -q "${setting_name}" ; then
-                export ${setting_name}="${setting_value}"
-                echo "Loaded config parameter ${setting_name} with value of '${setting_value}'"
+        if echo "${@}" | grep -q "${setting_name}" ; then
+            export ${setting_name}="${setting_value}"
+            if [[ ${interactive} == true ]]; then
+              echo "Loaded config parameter ${setting_name} with value of '${setting_value}'"
             fi
         fi
+    fi
     done < "${config_file}";
 }
 
@@ -80,15 +86,15 @@ function load_config()
 # email environment variable, for example:
 # email="admin@example.com" ./renew.sh
 if [[ -n "${IPA_CONFIG_FILE:-}" ]]; then
-  #Skip setup because IPA_CONFIG_FILE is already set
-  cd . #NO-OP, do nothing
+    #Skip setup because IPA_CONFIG_FILE is already set
+    cd . #NO-OP, do nothing
 elif [[ -e "/etc/ipa/server.conf" ]]; then
-  IPA_CONFIG_FILE="/etc/ipa/server.conf"
+    IPA_CONFIG_FILE="/etc/ipa/server.conf"
 elif [[ -e "/etc/ipa/default.conf" ]]; then
-  IPA_CONFIG_FILE="/etc/ipa/default.conf"
+    IPA_CONFIG_FILE="/etc/ipa/default.conf"
 else
-  errcho "FATAL: No ipa config found; exiting!!!"
-  exit 1
+    errcho "FATAL: No ipa config found; exiting!!!"
+    exit 1
 fi
 
 load_config ${IPA_CONFIG_FILE} realm domain
@@ -98,26 +104,27 @@ load_config ${IPA_CONFIG_FILE} realm domain
 #such that the domain name is provided by the platform
 #instead of my intended hostname
 if [[ -n ${domain} ]]; then
-  host="$(hostname -s).${domain}"
+    host="$(hostname -s).${domain}"
 else
-  host="$(hostname --fqdn)"
+    host="$(hostname --fqdn)"
 fi
 
 
 # Get kerberos ticket to modify DNS entries
 if [[ ! -e /etc/lets-encrypt.keytab ]]; then
-  errcho "FATAL: /etc/lets-encrypt.keytab not found; exiting!!!"
-  exit 1
+    errcho "FATAL: /etc/lets-encrypt.keytab not found; exiting!!!"
+    exit 1
 fi
 
 if ! kinit -k -t /etc/lets-encrypt.keytab "lets-encrypt/${host}"; then
-  errcho "FATAL: Could not kinit (RC=$?); exiting!!!" 
+    errcho "FATAL: Could not kinit (RC=$?); exiting!!!" 
+    exit 1
 fi
 
 #Calculate the domain part of the hostname
 dns_domain_name="${host#*\.}"
 if [[ ${dns_domain_name} != ${domain} ]]; then
-  errcho "WARNING: ${dns_domain_name} != ${domain}; continuing anyway..."
+    errcho "WARNING: ${dns_domain_name} != ${domain}; continuing anyway..."
 fi
 
 #Calculate the host name arguments to pass to certbot
@@ -133,26 +140,26 @@ email="${email:-${hostmaster%\.}}"
 
 # Apply for a new cert using CertBot with DNS verification
 certbot certonly --quiet \
-                 --manual \
-                 --preferred-challenges dns \
-                 --manual-public-ip-logging-ok \
-                 --manual-auth-hook 'ipa dnsrecord-mod ${CERTBOT_DOMAIN#*.}. _acme-challenge.${CERTBOT_DOMAIN}. --txt-rec=${CERTBOT_VALIDATION}' \
-                 ${domain_args} \
-                 --agree-tos \
-                 --email "${email}" \
-                 --expand \
-                 -n
+    --manual \
+    --preferred-challenges dns \
+    --manual-public-ip-logging-ok \
+    --manual-auth-hook 'ipa dnsrecord-mod ${CERTBOT_DOMAIN#*.}. _acme-challenge.${CERTBOT_DOMAIN}. --txt-rec=${CERTBOT_VALIDATION}' \
+    ${domain_args} \
+    --agree-tos \
+    --email "${email}" \
+    --expand \
+    --noninteractive
 
 #Search for directory containing updated privkey.pem
 letsencrypt_pem_dir="$(find -L ${letsencrypt_live_dir} -newermt @${start_time_epoch} -type f -name 'privkey.pem' -exec dirname {} \;)"
 
 # Exit if no certificate has been updated since start of script execution
 if [[ -z "${letsencrypt_pem_dir}" ]]; then
-  if [[ ${interactive} == true ]]; then
-    errcho "WARNING: Certificates not updated; if you think this was wrong use the following command to import them:"
-    errcho "  ipa-server-certinstall -w -d <PATH/TO/fullchain.pem> <PATH/TO/privkey.pem>"
-  fi
-  exit 0
+    if [[ ${interactive} == true ]]; then
+        errcho "WARNING: Certificates not updated; if you think this was wrong use the following command to import them:"
+        errcho "  ipa-server-certinstall -w -d <PATH/TO/fullchain.pem> <PATH/TO/privkey.pem>"
+    fi
+    exit 0
 fi
 
 # Install the new Key/Cert, root does not need passwords like mere mortals

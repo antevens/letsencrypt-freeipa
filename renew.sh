@@ -1,7 +1,4 @@
 #!/bin/bash
-
-# Set strict mode
-set -euo pipefail
 #set -x
 
 # Copyright (c) 2017 Antonia Stevens a@antevens.com
@@ -24,6 +21,9 @@ set -euo pipefail
 #  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 #  DEALINGS IN THE SOFTWARE.
 
+# Set strict mode
+set -euo pipefail
+
 # Version
 version='0.0.2'
 
@@ -35,6 +35,11 @@ errcho(){ >&2 echo $@; }
 # Exit if not being run as root
 if [ "${EUID:-$(id -u)}" -ne "0" ] ; then
     errcho "This script needs superuser privileges, suggest running it as root"
+    exit 1
+fi
+
+if ! which ipa >/dev/null ; then
+    errcho "ipa not found; you probably need to update your PATH."
     exit 1
 fi
 
@@ -62,18 +67,18 @@ function load_config()
     # Verify config file permissions are correct and warn if they are not
     # Dual stat commands to work with both linux and bsd
     shift
-    while read line; do
-    if [[ "${line}" =~ ^[^#]*= ]]; then
-        setting_name="$(echo ${line} | awk --field-separator='=' '{print $1}' | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
-        setting_value="$(echo ${line} | cut --fields=1 --delimiter='=' --complement | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+    while read -r line; do
+        if [[ "${line}" =~ ^[^#]*= ]]; then
+            setting_name="$(echo "${line}" | awk --field-separator='=' '{print $1}' | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+            setting_value="$(echo "${line}" | cut --fields=1 --delimiter='=' --complement | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
 
-        if echo "${@}" | grep -q "${setting_name}" ; then
-            export ${setting_name}="${setting_value}"
-            if [[ ${interactive} == true ]]; then
-              echo "Loaded config parameter ${setting_name} with value of '${setting_value}'"
+            if echo "${@}" | grep -q "${setting_name}" ; then
+                export "${setting_name}"="${setting_value}"
+                if [[ ${interactive} == true ]]; then
+                  echo "Loaded config parameter ${setting_name} with value of '${setting_value}'"
+                fi
             fi
         fi
-    fi
     done < "${config_file}";
 }
 
@@ -138,20 +143,30 @@ email="${email:-${hostmaster%\.}}"
 #Probably should do some kind of validataion on
 #the above calculated values
 
-# Apply for a new cert using CertBot with DNS verification
+# Configure the manual auth hook
+# shellcheck disable=2016
+default_auth_hook='ipa dnsrecord-mod ${CERTBOT_DOMAIN#*.}. _acme-challenge.${CERTBOT_DOMAIN}. --txt-rec=${CERTBOT_VALIDATION}'
+# Set the auth hook
+auth_hook="${AUTH_HOOK:-${default_auth_hook}}"# Apply for a new cert using CertBot with DNS verification
 certbot certonly --quiet \
-    --manual \
-    --preferred-challenges dns \
-    --manual-public-ip-logging-ok \
-    --manual-auth-hook 'ipa dnsrecord-mod ${CERTBOT_DOMAIN#*.}. _acme-challenge.${CERTBOT_DOMAIN}. --txt-rec=${CERTBOT_VALIDATION}' \
-    ${domain_args} \
-    --agree-tos \
-    --email "${email}" \
-    --expand \
-    --noninteractive
+                 --manual \
+                 --preferred-challenges dns \
+                 --manual-public-ip-logging-ok \
+                 --manual-auth-hook "${auth_hook}" \
+                 ${domain_args} \
+                 --agree-tos \
+                 --email "${email}" \
+                 --expand \
+                 --noninteractive
 
 #Search for directory containing updated privkey.pem
-letsencrypt_pem_dir="$(find -L ${letsencrypt_live_dir} -newermt @${start_time_epoch} -type f -name 'privkey.pem' -exec dirname {} \;)"
+#Note, this used to be calculated before the certbot command was executed
+#but it only makes sense to do it afterwards.
+letsencrypt_pem_dir="$(find -L ${letsencrypt_live_dir} \
+                            -newermt @${start_time_epoch} \
+                            -type f \
+                            -name 'privkey.pem' \
+                            -exec dirname {} \;)"
 
 # Exit if no certificate has been updated since start of script execution
 if [[ -z "${letsencrypt_pem_dir}" ]]; then
@@ -163,6 +178,7 @@ if [[ -z "${letsencrypt_pem_dir}" ]]; then
 fi
 
 # Install the new Key/Cert, root does not need passwords like mere mortals
+echo "Ignore the following prompt for the Directory Manager's Password..."
 echo '' | ipa-server-certinstall -w -d "${letsencrypt_pem_dir}/fullchain.pem" "${letsencrypt_pem_dir}/privkey.pem" --dirman-password='' --pin=''
 
 echo "Certificates updated; restarting services"

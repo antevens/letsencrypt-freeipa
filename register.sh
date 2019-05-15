@@ -24,7 +24,8 @@
 set -euo pipefail
 
 # Version
-version='0.0.2'
+# shellcheck disable=2034
+version='0.0.3'
 
 # If there is no TTY then it's not interactive
 if ! [[ -t 1 ]]; then
@@ -42,13 +43,13 @@ function load_config()
     # Verify config file permissions are correct and warn if they are not
     # Dual stat commands to work with both linux and bsd
     shift
-    while read line; do
+    while read -r line; do
         if [[ "${line}" =~ ^[^#]*= ]]; then
-            setting_name="$(echo ${line} | awk --field-separator='=' '{print $1}' | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
-            setting_value="$(echo ${line} | cut --fields=1 --delimiter='=' --complement | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+            setting_name="$(echo "${line}" | awk --field-separator='=' '{print $1}' | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
+            setting_value="$(echo "${line}" | cut --fields=1 --delimiter='=' --complement | sed --expression 's/^[[:space:]]*//' --expression 's/[[:space:]]*$//')"
 
             if echo "${@}" | grep -q "${setting_name}" ; then
-                export ${setting_name}="${setting_value}"
+                export "${setting_name}"="${setting_value}"
                 echo "Loaded config parameter ${setting_name} with value of '${setting_value}'"
             fi
         fi
@@ -89,7 +90,8 @@ if [[ ${REPLY} =~ ^[Yy]$ ]]; then
     load_config '/etc/ipa/default.conf' realm
     host="$(hostname)"
     group='admins'
-    principals="$(ipa host-show ${host} --raw | grep krbprincipalname | grep 'host/' | sed 's.krbprincipalname: host/..' | sed s/@${realm}//)"
+    # shellcheck disable=2154
+    principals="$(ipa host-show "${host}" --raw | grep krbprincipalname | grep 'host/' | sed 's.krbprincipalname: host/..' | sed s/"@${realm}"//)"
 
     wget https://letsencrypt.org/certs/isrgrootx1.pem | sudo ipa-cacert-manage install isrgrootx1.pem -n ISRGRootCAX1 -t C,,
     wget https://letsencrypt.org/certs/letsencryptauthorityx3.pem | sudo ipa-cacert-manage install letsencryptauthorityx3.pem -n ISRGRootCAX3 -t C,,
@@ -109,13 +111,13 @@ if [[ ${REPLY} =~ ^[Yy]$ ]]; then
     ipa-getkeytab -p "lets-encrypt/${host}" -k /etc/lets-encrypt.keytab #add -r to renew
 
     for principal in ${principals} ; do
-        zone="$(echo "${principal}" | sed -e 's/^[a-zA-Z0-9\-\_]*\.//')"
-        ipa dnsrecord-add "${zone}." "_acme-challenge.${principal}." --txt-rec='INITIALIZED'
+        ipa dnsrecord-add "${principal#[a-zA-Z0-9\-\_]*\.}." "_acme-challenge.${principal}." --txt-rec='INITIALIZED'
     done
 
     # Apply for the initial certificate if script is available
-    if [ -f "$(dirname ${0})/renew.sh" ] ; then
-        sudo bash -c "$(dirname ${0})/renew.sh"
+    renew_script_path="$(dirname "${0}")/renew.sh"
+    if [ -f "${renew_script_path}" ] ; then
+        sudo bash -c "${renew_script_path}"
     fi
 else
     echo "Let's Encrypt registration cancelled by user"

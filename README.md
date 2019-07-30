@@ -58,3 +58,15 @@ mv /usr/lib/python2.7/site-packages/ipalib/install/certstore.py /usr/lib/python2
 wget https://pagure.io/freeipa/raw/master/f/ipalib/install/certstore.py -O /usr/lib/python2.7/site-packages/ipalib/install/certstore.py
 
 ipa-server-upgrade
+
+If you would like to automate the process using a cron job and you are using selinux you will have to add a policy that allows cron to send dbus messages to certmonger.  If you fail to do this the certificates will get renewed and downloaded from letsencrypt but will not be installed to IPA's service.  The following one liner will accomplish this task:
+
+```
+wget https://raw.githubusercontent.com/bdurrow/letsencrypt-freeipa/develop/letsencrypt-freeipa-cron.te &&
+sudo checkmodule -M -m -o letsencrypt-freeipa-cron.mod \
+  letsencrypt-freeipa-cron.te &&
+sudo semodule_package -o letsencrypt-freeipa-cron.pp \
+  -m letsencrypt-freeipa-cron.mod &&
+sudo semodule -i letsencrypt-freeipa-cron.pp &&
+echo SUCCESS
+```

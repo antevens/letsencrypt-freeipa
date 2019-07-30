@@ -1,0 +1,12 @@
+module letsencrypt-freeipa-cron 1.0;
+
+require {
+	type certmonger_t;
+	type system_cronjob_t;
+	class dbus send_msg;
+}
+
+#============= certmonger_t ==============
+allow certmonger_t system_cronjob_t:dbus send_msg;
+
+

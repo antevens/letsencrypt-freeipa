@@ -63,6 +63,15 @@ wget https://pagure.io/freeipa/raw/master/f/ipalib/install/certstore.py -O /usr/
 ipa-server-upgrade
 ```
 
+## selinux
+To allow ipa services to use the new certificates you must label them appropriately.  The following will accomplish that:
+
+```
+sudo semanage fcontext -a -f a -t cert_t \
+  '/etc/(letsencrypt|certbot)/(live|archive)(/.*)?' && 
+sudo restorecon -R -v /etc/letsencrypt
+```
+
 If you would like to automate the process using a cron job and you are using selinux you will have to add a policy that allows cron to send dbus messages to certmonger.  If you fail to do this the certificates will get renewed and downloaded from letsencrypt but will not be installed to IPA's service.  The following one liner will accomplish this task:
 
 ```

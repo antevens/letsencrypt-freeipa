@@ -35,19 +35,22 @@ The following steps are takeng during renewal:
 To install, register and apply for a cert run the following command on the IPA
 server as a root user with a valid admin kerberos ticket:
 
+```
 wget https://raw.githubusercontent.com/antevens/letsencrypt-freeipa/master/install.sh -O - | bash
-
+```
 
 Note that when upgrading from Centos/RHEL 7.3 to 7.4 you might encounter the
 following error/bug:
 https://pagure.io/freeipa/issue/7141
 https://bugzilla.redhat.com/show_bug.cgi?id=1484428
 
+```
 DEBUG stderr=certutil: Could not find cert: Server-Cert
 : PR_FILE_NOT_FOUND_ERROR: File not found
+```
 
-
-The following steps should mitigate the issue and allow the upgrade to proceed
+The following steps should mitigate the issue and allow the upgrade to proceed:
+```
 yum update -y # Will throw an error
 yum -y install patch
 cd /usr/lib/python2.7/site-packages/ipaserver
@@ -58,6 +61,7 @@ mv /usr/lib/python2.7/site-packages/ipalib/install/certstore.py /usr/lib/python2
 wget https://pagure.io/freeipa/raw/master/f/ipalib/install/certstore.py -O /usr/lib/python2.7/site-packages/ipalib/install/certstore.py
 
 ipa-server-upgrade
+```
 
 If you would like to automate the process using a cron job and you are using selinux you will have to add a policy that allows cron to send dbus messages to certmonger.  If you fail to do this the certificates will get renewed and downloaded from letsencrypt but will not be installed to IPA's service.  The following one liner will accomplish this task:
 

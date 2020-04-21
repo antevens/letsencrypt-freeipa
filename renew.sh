@@ -1,5 +1,6 @@
 #!/bin/bash
-#set -x
+
+
 
 # Copyright (c) 2017 Antonia Stevens a@antevens.com
 
@@ -23,33 +24,45 @@
 
 # Set strict mode
 set -euo pipefail
+certbot_debug_args=""
+
+#For debugging uncomment these
+#set -x
+#certbot_debug_args="--force-renewal"
 
 # Version
 # shellcheck disable=2034
 version='0.0.3'
 
 letsencrypt_live_dir="/etc/letsencrypt/live"
+installed_cert_db="/etc/httpd/alias/key3.db"
 
+# Function to print to stderr
 errcho(){ >&2 echo $@; }
 
-# Exit if not being run as root
 if [ "${EUID:-$(id -u)}" -ne "0" ] ; then
-    errcho "This script needs superuser privileges, suggest running it as root"
+    errcho "FATAL: This script needs superuser privileges, suggest running it as root."
     exit 1
 fi
 
 if ! which ipa >/dev/null ; then
-    errcho "ipa not found; you probably need to update your PATH."
+    errcho "FATAL: ipa not found; you probably need to update your PATH."
     exit 1
 fi
 
 if ! which ipa-server-certinstall >/dev/null ; then
-    errcho "ipa-server-certinstall not found; you probably need to update your PATH."
+    errcho "FATAL: ipa-server-certinstall not found; you probably need to update your PATH."
     exit 1
 fi
 
-# Start Unix time
-start_time_epoch="$(date +%s)"
+#Determine method to detect need for cert install
+if [ -n ${installed_cert_db} -a -e ${installed_cert_db} ]; then
+    find_newer_arg="-newer ${installed_cert_db}"
+else
+    errcho "WARNING: Falling back to current time for cert install logic"
+    #Using this logic cert install will be "singleshot"
+    find_newer_arg="-newermt @$(date +%s)"
+fi
 
 # If there is no TTY then it's not interactive
 if ! [[ -t 1 ]]; then
@@ -182,6 +195,7 @@ certbot certonly --quiet \
                  --manual-public-ip-logging-ok \
                  --manual-auth-hook "${auth_hook}" \
                  ${domain_args} \
+                 ${certbot_debug_args} \
                  --agree-tos \
                  --email "${email}" \
                  --expand \
@@ -191,7 +205,7 @@ certbot certonly --quiet \
 #Note, this used to be calculated before the certbot command was executed
 #but it only makes sense to do it afterwards.
 letsencrypt_pem_dir="$(find -L ${letsencrypt_live_dir} \
-                            -newermt @${start_time_epoch} \
+                            ${find_newer_arg} \
                             -type f \
                             -name 'privkey.pem' \
                             -exec dirname {} \;)"

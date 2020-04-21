@@ -55,8 +55,14 @@ if ! which ipa-server-certinstall >/dev/null ; then
     exit 1
 fi
 
-# Start Unix time
-start_time_epoch="$(date +%s)"
+#Determine method to detect need for cert install
+if [ -n ${installed_cert_db} -a -e ${installed_cert_db} ]; then
+    find_newer_arg="-newer ${installed_cert_db}"
+else
+    errcho "WARNING: Falling back to current time for cert install logic"
+    #Using this logic cert install will be "singleshot"
+    find_newer_arg="-newermt @$(date +%s)"
+fi
 
 # If there is no TTY then it's not interactive
 if ! [[ -t 1 ]]; then
@@ -199,7 +205,7 @@ certbot certonly --quiet \
 #Note, this used to be calculated before the certbot command was executed
 #but it only makes sense to do it afterwards.
 letsencrypt_pem_dir="$(find -L ${letsencrypt_live_dir} \
-                            -newermt @${start_time_epoch} \
+                            ${find_newer_arg} \
                             -type f \
                             -name 'privkey.pem' \
                             -exec dirname {} \;)"

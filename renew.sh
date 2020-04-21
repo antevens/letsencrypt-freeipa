@@ -1,5 +1,6 @@
 #!/bin/bash
-#set -x
+
+
 
 # Copyright (c) 2017 Antonia Stevens a@antevens.com
 
@@ -23,28 +24,34 @@
 
 # Set strict mode
 set -euo pipefail
+certbot_debug_args=""
+
+#For debugging uncomment these
+#set -x
+#certbot_debug_args="--force-renewal"
 
 # Version
 # shellcheck disable=2034
 version='0.0.3'
 
 letsencrypt_live_dir="/etc/letsencrypt/live"
+installed_cert_db="/etc/httpd/alias/key3.db"
 
+# Function to print to stderr
 errcho(){ >&2 echo $@; }
 
-# Exit if not being run as root
 if [ "${EUID:-$(id -u)}" -ne "0" ] ; then
-    errcho "This script needs superuser privileges, suggest running it as root"
+    errcho "FATAL: This script needs superuser privileges, suggest running it as root."
     exit 1
 fi
 
 if ! which ipa >/dev/null ; then
-    errcho "ipa not found; you probably need to update your PATH."
+    errcho "FATAL: ipa not found; you probably need to update your PATH."
     exit 1
 fi
 
 if ! which ipa-server-certinstall >/dev/null ; then
-    errcho "ipa-server-certinstall not found; you probably need to update your PATH."
+    errcho "FATAL: ipa-server-certinstall not found; you probably need to update your PATH."
     exit 1
 fi
 
@@ -182,6 +189,7 @@ certbot certonly --quiet \
                  --manual-public-ip-logging-ok \
                  --manual-auth-hook "${auth_hook}" \
                  ${domain_args} \
+                 ${certbot_debug_args} \
                  --agree-tos \
                  --email "${email}" \
                  --expand \

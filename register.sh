@@ -94,7 +94,7 @@ if [[ ${REPLY} =~ ^[Yy]$ ]]; then
     principals="$(ipa host-show "${host}" --raw | grep krbprincipalname | grep 'host/' | sed 's.krbprincipalname: host/..' | sed s/"@${realm}"//)"
 
     wget https://letsencrypt.org/certs/isrgrootx1.pem | sudo ipa-cacert-manage install isrgrootx1.pem -n ISRGRootCAX1 -t C,,
-    wget https://letsencrypt.org/certs/letsencryptauthorityx3.pem | sudo ipa-cacert-manage install letsencryptauthorityx3.pem -n ISRGRootCAX3 -t C,,
+    wget https://letsencrypt.org/certs/lets-encrypt-r3.pem | sudo ipa-cacert-manage install lets-encrypt-r3.pem -n ISRGRootCAR3 -t C,,
     if [ "${EUID}" -ne 0 ] && ${interactive} ; then
         sudo bash -c "export KRB5CCNAME='${KRB5CCNAME:-}' && ipa-certupdate -v"
     else

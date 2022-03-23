@@ -36,6 +36,7 @@ version='0.0.3'
 
 letsencrypt_live_dir="/etc/letsencrypt/live"
 installed_cert_db="/etc/httpd/alias/key3.db"
+dns_propagation_delay="0"
 
 # Function to print to stderr
 errcho(){ >&2 echo $@; }
@@ -158,7 +159,7 @@ email="${email:-${hostmaster%\.}}"
 
 # Configure the manual auth hook
 # shellcheck disable=2016
-default_auth_hook='ipa dnsrecord-mod ${CERTBOT_DOMAIN#*.}. _acme-challenge.${CERTBOT_DOMAIN}. --txt-rec=${CERTBOT_VALIDATION}'
+default_auth_hook='ipa dnsrecord-mod ${CERTBOT_DOMAIN#*.}. _acme-challenge.${CERTBOT_DOMAIN}. --txt-rec=${CERTBOT_VALIDATION} && sleep ${dns_propagation_delay}'
 
 # Configure alternative nsupdate hook
 nsupdate_auth_server="${NSUPDATE_AUTH_SERVER:-$(nslookup -type=soa "${dns_domain_name}"  | grep 'origin =' | sed -e 's/[[:space:]]*origin = //')}"

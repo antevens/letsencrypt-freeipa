@@ -3,6 +3,15 @@ Scripts to automate installation, configuration and renewal of LetsEncrypt certi
 
 Note that these scripts assume that FreeIPA is managing the DNS servers required to authorize the issuing of certificates for the domains in question.
 
+-------------------- RECENT Let's Encrypt Update for intermediate R3 -------------------------
+
+Let's Encrypt recently updated their infrastucture, this will break existing installations, to fix this run the following two commands on each IPA server.
+
+wget https://letsencrypt.org/certs/lets-encrypt-r3.pem | sudo ipa-cacert-manage install lets-encrypt-r3.pem -n ISRGRootCAR3 -t C,,
+ipa-certupdate
+
+-------------------------------------------------------------------------------------
+
 The register script will modify your FreeIPA setup so that the server you run
 it on can apply for LetsEncrypt SSL/TLS certificates for all hostnames/principals
 associted with it in FreeIPA.
